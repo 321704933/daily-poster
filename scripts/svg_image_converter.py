@@ -168,7 +168,7 @@ def _convert_with_resvg(svg_path: Path, output_path: Path, *, scale: float, qual
     try:
         import resvg_py
 
-        kwargs: dict = {"svg_path": str(svg_path), "zoom": max(0.1, float(scale))}
+        kwargs: dict = {"svg_path": str(svg_path), "zoom": max(1, int(scale))}
         if bg:
             kwargs["background"] = bg
         try:
