@@ -84,16 +84,15 @@ python scripts/render_poster.py --type baidu_hot --spec references/baidu-hot-spe
 ```text
 daily-poster/
 |-- .claude/                                        # 可选，本地开发工具配置目录（通常不提交）
+|-- .clawdhubignore                                 # Clawhub 打包忽略规则
 |-- assets/                                         # README 中使用的示例海报图片
 |   |-- baidu_hot_poster.png                        # 百度热搜海报示例图
 |   `-- daily_poster.png                            # 摸鱼日报海报示例图
-|-- out/                                            # 渲染输出目录
-|   `-- .gitkeep                                    # 保持空目录被 Git 跟踪
+|-- out/                                            # 渲染输出目录（运行时生成，默认不入库）
 |-- references/                                     # 示例规格、素材与参考文档
 |   |-- cache/                                      # 本地缓存资源目录
 |   |   `-- heisi-latest.jpg                        # 摸鱼日报示例中使用的黑丝日签缓存图
 |   |-- baidu-hot-spec.json                         # 百度热搜海报示例输入
-|   |-- baidu-logo.png                              # 百度热搜海报头部 Logo 素材
 |   |-- daily-poster-spec.json                      # 摸鱼日报海报示例输入
 |   |-- holiday-countdown-2026.json                 # 2026 节假日倒计时数据
 |   `-- input-schema.md                             # 输入 JSON 字段说明
@@ -102,11 +101,12 @@ daily-poster/
 |   |-- holiday_countdown.py                        # 节假日倒计时解析与格式化逻辑
 |   |-- lunar_calendar.py                           # 农历日期计算与格式化
 |   |-- poster_runtime.py                           # 通用 CLI、输出与格式转换运行时
-|   |-- render_baidu_hot.py                         # 百度热搜海报渲染器
+|   |-- render_baidu_hot.py                         # 百度热搜海报渲染器（内嵌百度 Logo base64）
 |   |-- render_daily_poster.py                      # 摸鱼日报海报渲染器
 |   |-- render_poster.py                            # 统一入口，按类型分发到不同渲染器
 |   `-- svg_image_converter.py                      # SVG 导出为 PNG/JPG/WEBP 的转换工具
 |-- .gitignore                                      # Git 忽略规则
+|-- LICENSE                                         # 项目许可证
 |-- README.md                                       # 项目说明文档
 |-- requirements.txt                                # Python 依赖列表
 `-- SKILL.md                                        # 当前项目技能说明
