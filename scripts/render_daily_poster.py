@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import argparse
 import base64
 from datetime import timedelta
 from functools import lru_cache
@@ -11,7 +10,6 @@ import json
 import mimetypes
 import os
 import re
-import tempfile
 import unicodedata
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -22,11 +20,14 @@ from xml.sax.saxutils import escape, quoteattr
 
 from holiday_countdown import HOLIDAYS_2026, Holiday, build_countdown_items, holidays_from_schedule, parse_base_date
 from lunar_calendar import format_lunar_text
-from svg_image_converter import SvgConversionError, convert_svg_file, normalize_output_formats, suffix_for_format
+from poster_runtime import run_renderer_cli
 
 DEFAULT_FONT_STACK = '"PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif'
 REFERENCE_DIR = Path(__file__).resolve().parent.parent / "references"
 CACHE_DIR = REFERENCE_DIR / "cache"
+POSTER_TYPE = "daily"
+DEFAULT_OUTPUT_SCALE = 1.0
+DEFAULT_OUTPUT_BACKGROUND = "#ffffff"
 BASE_THEME = {
     "paper": "#f3e7d2",
     "panel": "#f8f0e2",
@@ -67,6 +68,11 @@ def listify(value: Any) -> list[Any]:
     if value is None:
         return []
     return value if isinstance(value, list) else [value]
+
+
+def clean_text_lines(value: Any, *, limit: int | None = None) -> list[str]:
+    lines = [str(item).strip() for item in listify(value) if str(item).strip()]
+    return lines[:limit] if limit is not None else lines
 
 
 def char_units(char: str) -> float:
@@ -367,6 +373,9 @@ def resolve_header(spec: dict[str, Any]) -> dict[str, Any]:
         return {}
 
     header = dict(raw_header)
+    title = str(header.get("title", "")).strip()
+    if title and not str(header.get("masthead", "")).strip():
+        header["masthead"] = title
     auto_date = bool(header.get("auto_date")) or str(header.get("base_date", spec.get("base_date", ""))).strip().lower() in {"today", "auto"}
     if auto_date:
         current_date = resolve_base_date(spec, header)
@@ -389,14 +398,45 @@ def resolve_personal_info(spec: dict[str, Any]) -> dict[str, Any]:
     if title:
         info["title"] = title
 
+    raw_text_lines = clean_text_lines(info.get("text_lines"), limit=2)
+    if raw_text_lines:
+        info["text_lines"] = raw_text_lines
     if "text_lines" not in info:
-        bio_lines = [str(item).strip() for item in listify(info.get("bio_lines")) if str(item).strip()]
+        bio_lines = clean_text_lines(info.get("bio_lines"), limit=2)
         bio = str(info.get("bio", "")).strip()
+        signature = str(info.get("signature", "")).strip()
+        if signature and not bio and not bio_lines:
+            bio = signature
         if bio and not bio_lines:
             bio_lines = [bio]
         if bio_lines:
             info["text_lines"] = bio_lines
     return info
+
+
+def normalize_daily_spec(spec: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+    del base_dir
+    normalized = dict(spec)
+    normalized["poster_type"] = POSTER_TYPE
+
+    if "header" in normalized and isinstance(normalized.get("header"), dict):
+        header = normalized.get("header", {})
+        header = dict(header)
+        title = str(header.get("title", "")).strip()
+        if title and not str(header.get("masthead", "")).strip():
+            header["masthead"] = title
+        normalized["header"] = header
+
+    personal_info = normalized.get("personal_info", {})
+    if isinstance(personal_info, dict):
+        personal_info = dict(personal_info)
+        signature = str(personal_info.get("signature", "")).strip()
+        has_text = bool(personal_info.get("bio")) or bool(personal_info.get("bio_lines")) or bool(personal_info.get("text_lines"))
+        if signature and not has_text:
+            personal_info["bio"] = signature
+        normalized["personal_info"] = personal_info
+
+    return normalized
 
 
 def apply_default_sections(spec: dict[str, Any]) -> dict[str, Any]:
@@ -447,7 +487,7 @@ def apply_default_sections(spec: dict[str, Any]) -> dict[str, Any]:
             "badges": ["摸鱼 八卦", "加班 熬夜"],
         }
     promo_defaults = {
-        "title": "摸鱼主编",
+        "title": "智普虾🦐",
         "text_lines": list(DEFAULT_PROMO_LINES),
     }
     personal_info = resolve_personal_info(spec)
@@ -747,10 +787,27 @@ def draw_header(svg: Svg, spec: dict[str, Any], width: int) -> None:
     svg.add(rect(date_x, 38, 210, 188, fill=THEME["panel"], stroke=THEME["line"], stroke_width=3))
     svg.add(text_block(date_x + 105, 72, [str(header.get("year_month", ""))], font_size=26, fill=THEME["ink"], anchor="middle", weight=800))
     svg.add(line(date_x + 20, 86, date_x + 190, 86, stroke=THEME["soft"], stroke_width=2))
-    weekday = str(header.get("weekday", ""))
-    svg.add(text_block(date_x + 60, 150, [str(header.get("day", ""))], font_size=74, fill=THEME["ink"], anchor="middle", weight=800))
-    svg.add(text_block(date_x + 155, 120, [weekday[:2]], font_size=22, fill=THEME["ink"], anchor="middle", weight=700))
-    svg.add(text_block(date_x + 155, 154, [weekday[2:]], font_size=22, fill=THEME["ink"], anchor="middle", weight=700))
+    weekday = str(header.get("weekday", "")).strip()
+    day_text = str(header.get("day", "")).strip()
+    weekday_lines = [weekday] if weekday else []
+    if weekday.startswith("星期") and len(weekday) >= 3:
+        weekday_lines = ["星期", weekday[-1]]
+    svg.add(text_block(date_x + 60, 152, [day_text], font_size=74, fill=THEME["ink"], anchor="middle", weight=800))
+    if len(weekday_lines) == 2:
+        svg.add(
+            text_block(
+                date_x + 155,
+                118,
+                weekday_lines,
+                font_size=24,
+                fill=THEME["ink"],
+                anchor="middle",
+                weight=700,
+                line_height=32,
+            )
+        )
+    else:
+        svg.add(text_block(date_x + 155, 144, weekday_lines, font_size=22, fill=THEME["ink"], anchor="middle", weight=700))
     svg.add(line(date_x + 20, 172, date_x + 190, 172, stroke=THEME["soft"], stroke_width=2))
     svg.add(text_block(date_x + 105, 202, [str(header.get("lunar", ""))], font_size=22, fill=THEME["ink"], anchor="middle", weight=700))
     if show_issue_line:
@@ -876,7 +933,7 @@ def draw_promo(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
     promo = spec.get("promo_card", {})
     x, y, w = 838, 1226, 350  # Moved below spotlight
     h = 140  # Smaller height for more content but fits in layout
-    title = str(promo.get("title", "摸鱼主编")).strip()
+    title = str(promo.get("title", "智普虾🦐")).strip()
     body: list[str] = []
     for item in listify(promo.get("text_lines")):
         body.extend(wrap_text(str(item), 280, 18))
@@ -1000,81 +1057,15 @@ def render_poster(spec: dict[str, Any], *, base_dir: Path) -> str:
     return svg.render()
 
 
-def resolve_output_formats(spec: dict[str, Any], output_path: Path) -> list[str]:
-    configured = dig(spec, "output.formats")
-    if configured is not None:
-        formats = normalize_output_formats(configured)
-        if formats:
-            return formats
-        raise SystemExit("spec.output.formats must include at least one supported format.")
-    return normalize_output_formats(output_path.suffix or "svg")
-
-
-def build_output_paths(output_path: Path, formats: list[str]) -> dict[str, Path]:
-    base_path = output_path.with_suffix("") if output_path.suffix else output_path
-    resolved: dict[str, Path] = {}
-    requested_format = normalize_output_formats(output_path.suffix or "svg")[0] if output_path.suffix else None
-    for fmt in formats:
-        if len(formats) == 1 and requested_format == fmt and output_path.suffix:
-            resolved[fmt] = output_path
-            continue
-        resolved[fmt] = base_path.with_suffix(suffix_for_format(fmt))
-    return resolved
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Render a newspaper-style poster from JSON and optionally convert it to image formats.")
-    parser.add_argument("--spec", required=True, help="Path to the JSON spec file.")
-    parser.add_argument("--output", required=True, help="Output file path or basename. When spec.output.formats is set, sibling files are created from this stem.")
-    args = parser.parse_args()
-
-    spec_path = Path(args.spec).resolve()
-    output_path = Path(args.output).resolve()
-    if spec_path.suffix.lower() != ".json":
-        raise SystemExit("The spec file must be a .json file.")
-
-    spec = json.loads(spec_path.read_text(encoding="utf-8-sig"))
-    output_formats = resolve_output_formats(spec, output_path)
-    output_paths = build_output_paths(output_path, output_formats)
-    primary_output = next(iter(output_paths.values()))
-    primary_output.parent.mkdir(parents=True, exist_ok=True)
-
-    svg_markup = render_poster(spec, base_dir=spec_path.parent)
-    svg_path = output_paths.get("svg")
-    temp_svg_path: Path | None = None
-    if svg_path is None:
-        with tempfile.NamedTemporaryFile(prefix="daily-poster-", suffix=".svg", delete=False, dir=primary_output.parent) as handle:
-            temp_svg_path = Path(handle.name)
-        svg_path = temp_svg_path
-    svg_path.write_text(svg_markup, encoding="utf-8")
-
-    rendered_paths: list[Path] = []
-    quality = int(dig(spec, "output.quality", 92))
-    scale = float(dig(spec, "output.scale", 1.0))
-    background = str(dig(spec, "output.background", "#ffffff"))
-
-    try:
-        for fmt, target in output_paths.items():
-            if fmt == "svg":
-                rendered_paths.append(target)
-                continue
-            convert_svg_file(
-                svg_path,
-                target,
-                fmt=fmt,
-                scale=scale,
-                quality=quality,
-                background=background,
-            )
-            rendered_paths.append(target)
-    except SvgConversionError as exc:
-        raise SystemExit(f"Poster rendered to SVG, but image conversion failed: {exc}") from exc
-    finally:
-        if temp_svg_path is not None and temp_svg_path.exists():
-            temp_svg_path.unlink()
-
-    printed = ", ".join(str(path) for path in rendered_paths)
-    print(f"Rendered poster files: {printed}")
+    run_renderer_cli(
+        poster_type=POSTER_TYPE,
+        description="Render a newspaper-style poster from JSON and optionally convert it to image formats.",
+        render_svg=render_poster,
+        default_scale=DEFAULT_OUTPUT_SCALE,
+        default_background=DEFAULT_OUTPUT_BACKGROUND,
+        prepare_spec=normalize_daily_spec,
+    )
 
 
 if __name__ == "__main__":
