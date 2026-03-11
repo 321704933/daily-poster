@@ -1,6 +1,13 @@
 # Python Daily Poster
 
-用 Python 生成 `摸鱼日报` 和 `百度热搜` 海报，默认输出 SVG，可按需导出 PNG/JPG/WEBP。
+`Python Daily Poster` 是一个基于 JSON 规格生成中文信息海报的 Python 工具，适合做日报、榜单、资讯卡片这类固定版式输出。
+
+当前内置两种海报类型：
+
+- `daily`：生成 `摸鱼日报` 风格海报，可组合个人信息、摘要、倒计时、日程、语录等内容模块
+- `baidu_hot`：生成 `百度热搜` 风格海报，按统一版式拉取并渲染热点榜单
+
+默认输出 SVG，也支持按需导出 PNG/JPG/WEBP，方便接入自动化脚本、定时任务或内容发布流程。
 
 ## 安装
 
@@ -72,10 +79,39 @@ python scripts/render_poster.py --type baidu_hot --spec references/baidu-hot-spe
 - `baidu_hot` 顶部日期区同一行显示公历、星期、农历
 - 所有入口脚本都会输出统一 JSON 结果
 
-## 主要文件
+## 项目目录架构
 
-- `scripts/render_poster.py`: 统一入口
-- `scripts/render_daily_poster.py`: 摸鱼日报渲染器
-- `scripts/render_baidu_hot.py`: 百度热搜渲染器
-- `references/daily-poster-spec.json`: 摸鱼日报示例
-- `references/baidu-hot-spec.json`: 百度热搜示例
+```text
+daily-poster/
+|-- .claude/                                        # 可选，本地开发工具配置目录（通常不提交）
+|-- assets/                                         # README 中使用的示例海报图片
+|   |-- baidu_hot_poster.png                        # 百度热搜海报示例图
+|   `-- daily_poster.png                            # 摸鱼日报海报示例图
+|-- out/                                            # 渲染输出目录
+|   `-- .gitkeep                                    # 保持空目录被 Git 跟踪
+|-- references/                                     # 示例规格、素材与参考文档
+|   |-- cache/                                      # 本地缓存资源目录
+|   |   `-- heisi-latest.jpg                        # 摸鱼日报示例中使用的黑丝日签缓存图
+|   |-- baidu-hot-spec.json                         # 百度热搜海报示例输入
+|   |-- baidu-logo.png                              # 百度热搜海报头部 Logo 素材
+|   |-- daily-poster-spec.json                      # 摸鱼日报海报示例输入
+|   |-- holiday-countdown-2026.json                 # 2026 节假日倒计时数据
+|   `-- input-schema.md                             # 输入 JSON 字段说明
+|-- scripts/                                        # 渲染器与运行时脚本
+|   |-- generate_holiday_countdown.py               # 生成节假日倒计时数据文件
+|   |-- holiday_countdown.py                        # 节假日倒计时解析与格式化逻辑
+|   |-- lunar_calendar.py                           # 农历日期计算与格式化
+|   |-- poster_runtime.py                           # 通用 CLI、输出与格式转换运行时
+|   |-- render_baidu_hot.py                         # 百度热搜海报渲染器
+|   |-- render_daily_poster.py                      # 摸鱼日报海报渲染器
+|   |-- render_poster.py                            # 统一入口，按类型分发到不同渲染器
+|   `-- svg_image_converter.py                      # SVG 导出为 PNG/JPG/WEBP 的转换工具
+|-- .gitignore                                      # Git 忽略规则
+|-- README.md                                       # 项目说明文档
+|-- requirements.txt                                # Python 依赖列表
+`-- SKILL.md                                        # 当前项目技能说明
+```
+
+## 致谢
+
+- 项目中的部分动态内容接口由 [XXApi](https://xxapi.cn/about) 提供，包括百度热搜及部分 `daily` 模块所使用的数据能力。

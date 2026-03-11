@@ -18,6 +18,35 @@ python scripts/render_poster.py --spec <spec.json> --output out/poster
 - `personal_info`
 - `output`
 
+`poster_type` 语义映射：
+
+- `daily` = `摸鱼日报` / `日报` / `日刊` / `今日简报` 风格海报
+- `baidu_hot` = `百度热搜` / `百度热点` / `热搜榜` 风格海报
+
+注意：
+
+- JSON 输入里仍然使用英文枚举值 `daily` 和 `baidu_hot`
+- 中文名称、中文别名主要用于提示词理解、AI 识别和文档阅读
+
+## AI 识别提示
+
+如果需求、提示词或说明文本里出现下面这些中文说法，可按以下规则理解：
+
+| 中文说法 | 规范 `poster_type` | 说明 |
+| --- | --- | --- |
+| 摸鱼日报 | `daily` | 默认指中文日报风格海报 |
+| 摸鱼海报 | `daily` | 常见口语表达，按日报模板处理 |
+| 日报 / 日刊 / 今日简报 | `daily` | 指向 `daily` 版式 |
+| 百度热搜 | `baidu_hot` | 默认指百度热搜榜海报 |
+| 百度热点 | `baidu_hot` | 与百度热搜同义使用 |
+| 热搜榜 | `baidu_hot` | 在本项目中默认映射到百度热搜模板 |
+
+推荐理解规则：
+
+- 用户提到 `摸鱼日报`、`日报`、`今日简报` 时，优先生成 `daily`
+- 用户提到 `百度热搜`、`百度热点`、`热搜榜` 时，优先生成 `baidu_hot`
+- 如果用户用中文描述需求，AI 在生成 JSON 时应输出英文字段值，不要把 `poster_type` 直接写成中文
+
 `personal_info` 兼容：
 
 - `name` / `title`
@@ -64,7 +93,7 @@ python scripts/render_poster.py --spec <spec.json> --output out/poster
 }
 ```
 
-## `daily`
+## `daily`（摸鱼日报）
 
 输入：
 
@@ -80,7 +109,7 @@ python scripts/render_poster.py --spec <spec.json> --output out/poster
 }
 ```
 
-## `baidu_hot`
+## `baidu_hot`（百度热搜）
 
 输入：
 
