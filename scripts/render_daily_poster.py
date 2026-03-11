@@ -863,33 +863,51 @@ def draw_spotlight(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
 
 def draw_promo(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
     promo = spec.get("promo_card", {})
-    x, y, w, h = 838, 1236, 350, 170
-    svg.add(rect(x, y, w, h, fill=THEME["panel"], stroke=THEME["line"], stroke_width=3))
-    svg.add(rect(x + 12, y + 12, w - 24, h - 24, fill="none", stroke=THEME["soft"], stroke_width=2))
+    x, y, w = 838, 1236, 350  # Fixed position at bottom
+    # Calculate dynamic height based on content
     title = str(promo.get("title", "摸鱼主编")).strip()
-    if title:
-        svg.add(text_block(x + w / 2, y + 40, [title], font_size=28, fill=THEME["accent"], anchor="middle", weight=800, line_height=30))
-        svg.add(line(x + 32, y + 56, x + w - 32, y + 56, stroke=THEME["line"], stroke_width=2))
     body: list[str] = []
     for item in listify(promo.get("text_lines")):
         body.extend(wrap_text(str(item), 280, 18))
-    svg.add(text_block(x + w / 2, y + 86, trim_lines(body, 4), font_size=18, fill=THEME["ink"], anchor="middle", weight=600, line_height=26))
+    body_lines = trim_lines(body, 4)
+    num_lines = len(body_lines)
+    h = 74 + (num_lines * 26) + 30 if num_lines else 74
+    h = max(h, 120)  # Minimum height
+
+    svg.add(rect(x, y, w, h, fill=THEME["panel"], stroke=THEME["line"], stroke_width=3))
+    svg.add(rect(x + 12, y + 12, w - 24, h - 24, fill="none", stroke=THEME["soft"], stroke_width=2))
+    if title:
+        svg.add(text_block(x + w / 2, y + 40, [title], font_size=28, fill=THEME["accent"], anchor="middle", weight=800, line_height=30))
+        svg.add(line(x + 32, y + 56, x + w - 32, y + 56, stroke=THEME["line"], stroke_width=2))
+    if body_lines:
+        svg.add(text_block(x + w / 2, y + 86, body_lines, font_size=18, fill=THEME["ink"], anchor="middle", weight=600, line_height=26))
 
 
 
 def draw_quote(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
     quote = spec.get("quote_card", {})
-    x, y, w, h = 54, 1236, 760, 170
-    svg.add(rect(x, y, w, h, fill=THEME["panel"], stroke=THEME["line"], stroke_width=3))
+    x, y, w = 54, 1236, 760  # Fixed position at bottom
+    # Calculate dynamic height based on content
     title = str(quote.get("title", "")).strip()
-    text_y = y + 90
+    quote_text, inline_suffix = split_quote_text_source(str(quote.get("text", "一句大字文案。")))
+    main_lines = wrap_text(quote_text, 680, 26)
+    num_lines = len(main_lines)
+    # Base height: title (50) + text (num_lines * 36) + source (26) + padding
+    if title:
+        h = 50 + (num_lines * 36) + 30 + 26 if num_lines else 120
+    else:
+        h = 50 + (num_lines * 36) + 30 + 26 if num_lines else 100
+    h = max(h, 120)  # Minimum height
+
+    svg.add(rect(x, y, w, h, fill=THEME["panel"], stroke=THEME["line"], stroke_width=3))
+    text_y = y + 50
     if title:
         svg.add(text_block(x + w / 2, y + 42, [title], font_size=32, fill=THEME["ink"], anchor="middle", weight=800))
-        text_y = y + 92
+        text_y = y + 50 + (num_lines * 36) if num_lines else y + 90
 
-    quote_text, inline_suffix = split_quote_text_source(str(quote.get("text", "一句大字文案。")))
-    main_lines = trim_lines(wrap_text(quote_text, 680, 26), 3)
-    svg.add(text_block(x + w / 2, text_y, main_lines, font_size=26, fill=THEME["ink"], anchor="middle", weight=700, line_height=36))
+    main_lines = trim_lines(main_lines, 4)
+    if main_lines:
+        svg.add(text_block(x + w / 2, text_y, main_lines, font_size=26, fill=THEME["ink"], anchor="middle", weight=700, line_height=36))
     source = str(quote.get("source", "")).strip()
     if source == "摸鱼办":
         source = ""
