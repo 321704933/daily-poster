@@ -1,0 +1,21 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Output files
+out/*
+!out/.gitkeep
+
+# Large assets (keep small examples only)
+assets/*.png
+assets/*.jpg
+assets/*.jpeg
+
+# Cache
+references/cache/
