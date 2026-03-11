@@ -71,6 +71,90 @@ python scripts/render_poster.py --spec <spec.json> --output out/poster
 
 - `formats` 支持 `svg`、`png`、`jpg`、`jpeg`、`webp`
 - 渲染器总是先输出 SVG，再按需生成位图
+- `scale` 影响 `png`、`jpg`、`jpeg`、`webp` 的尺寸倍率，不影响 SVG
+- `quality` 只影响 `jpg`、`jpeg`、`webp`
+- `background` 主要用于 `jpg`、`jpeg` 这类不透明输出，也可显式指定其他位图导出底色
+
+## AI 生成图片提示
+
+如果用户的目标不是“只要 SVG 源文件”，而是“要图片文件”“发 PNG”“导出 JPG”“给我 WEBP”，AI 应显式补全 `output` 字段。
+
+推荐映射：
+
+| 用户说法 | 推荐 `output` |
+| --- | --- |
+| 生成图片 / 导出图片 / 发我海报图 | `"formats": ["png"], "scale": 2` |
+| 同时要 SVG 和 PNG | `"formats": ["svg", "png"], "scale": 2` |
+| 导出 JPG / JPEG | `"formats": ["jpg"], "scale": 2, "quality": 92, "background": "#ffffff"` |
+| 导出 WEBP | `"formats": ["webp"], "scale": 2, "quality": 92` |
+
+推荐规则：
+
+- 用户没有指定格式，但明确要“图片”时，优先用 `png`
+- 用户要“源文件 + 图片”时，优先用 `["svg", "png"]`
+- 用户要朋友圈、聊天发送、通用分享图时，优先用 `png`
+- 用户要更小体积时，可考虑 `webp`
+- 用户明确要 `jpg` / `jpeg` 时，记得补 `background`
+- AI 生成 JSON 时，优先显式写 `output.formats`，不要只依赖命令行输出后缀推断
+
+推荐 JSON 片段：
+
+PNG：
+
+```json
+{
+  "output": {
+    "formats": ["png"],
+    "scale": 2
+  }
+}
+```
+
+SVG + PNG：
+
+```json
+{
+  "output": {
+    "formats": ["svg", "png"],
+    "scale": 2
+  }
+}
+```
+
+JPG：
+
+```json
+{
+  "output": {
+    "formats": ["jpg"],
+    "scale": 2,
+    "quality": 92,
+    "background": "#ffffff"
+  }
+}
+```
+
+WEBP：
+
+```json
+{
+  "output": {
+    "formats": ["webp"],
+    "scale": 2,
+    "quality": 92
+  }
+}
+```
+
+命令建议：
+
+- 当 `output.formats` 里只有一个格式时，可以用 `--output out/poster` 或 `--output out/poster.png`
+- 当 `output.formats` 里有多个格式时，推荐用 `--output out/poster`，程序会生成同名不同后缀文件
+- AI 如果需要给出完整命令，优先使用：
+
+```bash
+python scripts/render_poster.py --spec <spec.json> --output out/poster
+```
 
 ## Stdout JSON
 
