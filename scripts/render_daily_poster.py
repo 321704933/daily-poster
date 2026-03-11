@@ -412,7 +412,7 @@ def apply_default_sections(spec: dict[str, Any]) -> dict[str, Any]:
         spec["lead_story"] = {
             "auto_hot36kr": True,
             "title": "今日热点",
-            "limit": 5,
+            "limit": 10,  # Increased to fill more content
             "intro": "",
             "stamp": "36氪热榜",
         }
@@ -480,10 +480,10 @@ def resolve_lead_story(spec: dict[str, Any], *, base_dir: Path) -> dict[str, Any
     api_url = str(story.get("api_url", default_url)).strip()
     payload = fetch_json_payload(api_url) if api_url else {}
     try:
-        default_limit = 5 if auto_hot36kr else 6
+        default_limit = 10 if auto_hot36kr else 6
         limit = int(story.get("limit", default_limit) or default_limit)
     except (TypeError, ValueError):
-        limit = 5 if auto_hot36kr else 6
+        limit = 10 if auto_hot36kr else 6
     limit = max(limit, 0)
 
     if auto_hot36kr:
@@ -563,17 +563,28 @@ def resolve_quote_card(spec: dict[str, Any]) -> dict[str, Any]:
         return quote
 
     api_url = str(quote.get("api_url", "https://v2.xxapi.cn/api/renjian")).strip()
-    payload = fetch_json_payload(api_url) if api_url else {}
-    if not isinstance(payload, dict):
-        return quote
 
-    data = payload.get("data")
-    text = str(data).strip() if isinstance(data, str) else ""
-    if text:
-        text, source_suffix = split_quote_text_source(text)
-        if source_suffix:
-            quote["source_suffix"] = source_suffix
-        quote["text"] = text
+    # Try to fetch quote, retry if text is too long (more than 4 lines)
+    max_retries = 3
+    for attempt in range(max_retries):
+        payload = fetch_json_payload(api_url) if api_url else {}
+        if not isinstance(payload, dict):
+            break
+
+        data = payload.get("data")
+        text = str(data).strip() if isinstance(data, str) else ""
+        if text:
+            text, source_suffix = split_quote_text_source(text)
+            # Check if text is too long (more than 4 lines when wrapped)
+            wrapped = wrap_text(text, 680, 26)
+            if len(wrapped) <= 4 or attempt == max_retries - 1:
+                if source_suffix:
+                    quote["source_suffix"] = source_suffix
+                quote["text"] = text
+                break
+            # Text too long, retry with new quote
+            continue
+
     source = str(quote.get("source", "")).strip()
     quote["source"] = "" if source == "摸鱼办" else source
     return quote
@@ -863,58 +874,46 @@ def draw_spotlight(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
 
 def draw_promo(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
     promo = spec.get("promo_card", {})
-    x, y, w = 838, 1236, 350  # Fixed position at bottom
-    # Calculate dynamic height based on content
+    x, y, w = 838, 1226, 350  # Moved below spotlight
+    h = 140  # Smaller height for more content but fits in layout
     title = str(promo.get("title", "摸鱼主编")).strip()
     body: list[str] = []
     for item in listify(promo.get("text_lines")):
         body.extend(wrap_text(str(item), 280, 18))
-    body_lines = trim_lines(body, 4)
-    num_lines = len(body_lines)
-    h = 74 + (num_lines * 26) + 30 if num_lines else 74
-    h = max(h, 120)  # Minimum height
+    body_lines = trim_lines(body, 4)  # Allow up to 4 lines
 
     svg.add(rect(x, y, w, h, fill=THEME["panel"], stroke=THEME["line"], stroke_width=3))
     svg.add(rect(x + 12, y + 12, w - 24, h - 24, fill="none", stroke=THEME["soft"], stroke_width=2))
     if title:
-        svg.add(text_block(x + w / 2, y + 40, [title], font_size=28, fill=THEME["accent"], anchor="middle", weight=800, line_height=30))
-        svg.add(line(x + 32, y + 56, x + w - 32, y + 56, stroke=THEME["line"], stroke_width=2))
+        svg.add(text_block(x + w / 2, y + 36, [title], font_size=26, fill=THEME["accent"], anchor="middle", weight=800, line_height=28))
+        svg.add(line(x + 32, y + 50, x + w - 32, y + 50, stroke=THEME["line"], stroke_width=2))
     if body_lines:
-        svg.add(text_block(x + w / 2, y + 86, body_lines, font_size=18, fill=THEME["ink"], anchor="middle", weight=600, line_height=26))
+        svg.add(text_block(x + w / 2, y + 72, body_lines, font_size=17, fill=THEME["ink"], anchor="middle", weight=600, line_height=24))
 
 
 
 def draw_quote(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
     quote = spec.get("quote_card", {})
-    x, y, w = 54, 1236, 760  # Fixed position at bottom
-    # Calculate dynamic height based on content
+    x, y, w = 54, 1226, 760  # Below spotlight
+    h = 140  # Smaller height
     title = str(quote.get("title", "")).strip()
     quote_text, inline_suffix = split_quote_text_source(str(quote.get("text", "一句大字文案。")))
-    main_lines = wrap_text(quote_text, 680, 26)
-    num_lines = len(main_lines)
-    # Base height: title (50) + text (num_lines * 36) + source (26) + padding
-    if title:
-        h = 50 + (num_lines * 36) + 30 + 26 if num_lines else 120
-    else:
-        h = 50 + (num_lines * 36) + 30 + 26 if num_lines else 100
-    h = max(h, 120)  # Minimum height
-
+    main_lines = trim_lines(wrap_text(quote_text, 680, 26), 2)  # Max 2 lines
     svg.add(rect(x, y, w, h, fill=THEME["panel"], stroke=THEME["line"], stroke_width=3))
-    text_y = y + 50
+    text_y = y + 70
     if title:
-        svg.add(text_block(x + w / 2, y + 42, [title], font_size=32, fill=THEME["ink"], anchor="middle", weight=800))
-        text_y = y + 50 + (num_lines * 36) if num_lines else y + 90
+        svg.add(text_block(x + w / 2, y + 36, [title], font_size=30, fill=THEME["ink"], anchor="middle", weight=800))
+        text_y = y + 72
 
-    main_lines = trim_lines(main_lines, 4)
     if main_lines:
-        svg.add(text_block(x + w / 2, text_y, main_lines, font_size=26, fill=THEME["ink"], anchor="middle", weight=700, line_height=36))
+        svg.add(text_block(x + w / 2, text_y, main_lines, font_size=24, fill=THEME["ink"], anchor="middle", weight=700, line_height=32))
     source = str(quote.get("source", "")).strip()
     if source == "摸鱼办":
         source = ""
     source_suffix = str(quote.get("source_suffix", "")).strip() or inline_suffix
     source_line = " ".join(part for part in (source, source_suffix) if part)
     if source_line:
-        svg.add(text_block(x + w - 24, y + h - 22, [source_line], font_size=18, fill=THEME["muted"], anchor="end", weight=700))
+        svg.add(text_block(x + w - 24, y + h - 16, [source_line], font_size=16, fill=THEME["muted"], anchor="end", weight=700))
 
 
 def draw_footer(svg: Svg, spec: dict[str, Any]) -> None:
@@ -961,7 +960,7 @@ def draw_decorations(svg: Svg, spec: dict[str, Any], base_dir: Path) -> None:
             stroke_width=0,
         )
     svg.add(line(54, 972, 1188, 972, stroke=THEME["line"], stroke_width=2))
-    svg.add(line(54, 1226, 1188, 1226, stroke=THEME["line"], stroke_width=2))
+    svg.add(line(54, 1380, 1188, 1380, stroke=THEME["line"], stroke_width=2))
 
 
 def render_poster(spec: dict[str, Any], *, base_dir: Path) -> str:
