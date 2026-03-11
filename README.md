@@ -141,7 +141,7 @@ daily-poster/
 
 ### 渲染示例
 
-![摸鱼日报示例](./out/example-poster.svg)
+![摸鱼日报示例](./out/example-poster.png)
 
 ### 示例 JSON
 
